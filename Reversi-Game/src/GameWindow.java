@@ -1,32 +1,32 @@
 import javax.swing.*;
 import java.awt.*;
-import java.awt.event.KeyEvent;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 
 public class GameWindow extends JPanel implements MouseListener {
-    public enum GameState {
-        WhiteTurn,
-        BlackTurn,
-        Draw,
-        WhiteWins,
-        BlackWins
-    }
+    public static final int PLAYER_ONE = 1;
+    public static final int PLAYER_TWO = 2;
 
-    private static final int PANEL_HEIGHT = 600;
-    private static final int PANEL_WIDTH = 500;
-
+    public static final String RESET_MESSAGE = "Press R to restart.";
+    private static final int NO_VALID_MOVES = 0;
     private GameGrid gameGrid;
     private GameState gameState;
-    private String gameStateStr;
-
+    String gameStateStr;
+    private GameStateBehavior gameStateBehavior;
     public GameWindow() {
-        setPreferredSize(new Dimension(PANEL_WIDTH, PANEL_HEIGHT));
-        setBackground(Color.LIGHT_GRAY);
+        setPreferredSize(new Dimension(GameConfig.PANEL_WIDTH, GameConfig.PANEL_HEIGHT));
+        setBackground(GameConfig.BACKGROUND_COLOR);
 
-        gameGrid = new GameGrid(new Position(0, 0), PANEL_WIDTH, PANEL_HEIGHT - 100, 8, 8);
+        GridCellFactory cellFactory = new DefaultGridCellFactory();
+
+        gameGrid = new GameGrid(new Position(0, 0), GameConfig.PANEL_WIDTH, GameConfig.PANEL_HEIGHT - GameConfig.STATUS_BAR_HEIGHT, GameConfig.GRID_WIDTH, GameConfig.GRID_HEIGHT, new DefaultGridCellFactory());
+        gameStateStr = "Black Player Turn";
         setGameState(GameState.BlackTurn);
         addMouseListener(this);
+    }
+
+    public GameGrid getGameGrid() {
+        return gameGrid;
     }
 
     @Override
@@ -43,85 +43,68 @@ public class GameWindow extends JPanel implements MouseListener {
     }
 
     public void handleInput(int keyCode) {
-        if (keyCode == KeyEvent.VK_ESCAPE) {
-            System.exit(0);
-        } else if (keyCode == KeyEvent.VK_R) {
-            restart();
-        }
+        gameStateBehavior.handleInput(this, keyCode);
     }
 
     public void playTurn(Position gridPosition) {
-        if (!gameGrid.getAllValidMoves().contains(gridPosition)) {
-            return;
-        }
-
-        if (gameState == GameState.BlackTurn) {
-            gameGrid.playMove(gridPosition, 1);
-            setGameState(GameState.WhiteTurn);
-        } else if (gameState == GameState.WhiteTurn) {
-            gameGrid.playMove(gridPosition, 2);
-            setGameState(GameState.BlackTurn);
-        }
-
-        checkGameEnd(true);
-        repaint();
-    }
-
-    public void setGameState(GameState newState) {
-        gameState = newState;
-        gameGrid.updateValidMoves((gameState == GameState.BlackTurn) ? 1 : 2);
-
-        if (gameGrid.getAllValidMoves().isEmpty()) {
-            checkGameEnd(false);
-        } else {
-            gameStateStr = (gameState == GameState.BlackTurn) ? "Black Player Turn" : "White Player Turn";
-        }
+        gameStateBehavior.playTurn(this, gridPosition);
     }
 
     public void checkGameEnd(boolean stillValidMoves) {
-        if (gameState == GameState.WhiteWins || gameState == GameState.BlackWins || gameState == GameState.Draw) {
-            return;
-        }
+        gameStateBehavior.checkGameEnd(this, stillValidMoves);
+    }
 
-        if (gameGrid.getAllValidMoves().isEmpty()) {
-            gameGrid.updateValidMoves((gameState == GameState.BlackTurn) ? 2 : 1);
-            if (gameGrid.getAllValidMoves().isEmpty()) {
-                int gameResult = gameGrid.getWinner(stillValidMoves);
-                switch (gameResult) {
-                    case 1:
-                        setGameState(GameState.BlackWins);
-                        gameStateStr = "Black Player Wins! Press R to restart.";
-                        break;
-                    case 2:
-                        setGameState(GameState.WhiteWins);
-                        gameStateStr = "White Player Wins! Press R to restart.";
-                        break;
-                    case 3:
-                        setGameState(GameState.Draw);
-                        gameStateStr = "Draw! Press R to restart.";
-                        break;
-                }
-            }
-        } else {
-            gameStateStr = (gameState == GameState.BlackTurn) ? "Black Player Turn" : "White Player Turn";
+    public void setGameState(GameState newState) {
+        switch (newState) {
+            case BlackTurn:
+                gameStateBehavior = new BlackTurnState();
+                break;
+            case WhiteTurn:
+                gameStateBehavior = new WhiteTurnState();
+                break;
+            case Draw, WhiteWins, BlackWins:
+                gameStateBehavior = new GameOverState();
+                break;
+        }
+        gameState = newState;
+        gameStateBehavior.updateGameState(this);
+        repaint();
+    }
+
+    public void handleGameEnd(int winner) {
+        switch (winner) {
+            case PLAYER_ONE:
+                setGameState(GameState.BlackWins);
+                gameStateStr = "Black Player Wins! " + RESET_MESSAGE;
+                break;
+            case PLAYER_TWO:
+                setGameState(GameState.WhiteWins);
+                gameStateStr = "White Player Wins! " + RESET_MESSAGE;
+                break;
+            case NO_VALID_MOVES:
+                setGameState(GameState.Draw);
+                gameStateStr = "Draw! " + RESET_MESSAGE;
+                break;
         }
     }
 
     private void drawGameState(Graphics g) {
-        g.setColor(Color.BLACK);
-        g.setFont(new Font("Arial", Font.BOLD, 28));
+        g.setColor(GameConfig.TEXT_COLOR);
+        g.setFont(GameConfig.STATUS_FONT);
         int strWidth = g.getFontMetrics().stringWidth(gameStateStr);
-        g.drawString(gameStateStr, PANEL_WIDTH / 2 - strWidth / 2, PANEL_HEIGHT - 40);
+        g.drawString(gameStateStr, GameConfig.PANEL_WIDTH / 2 - strWidth / 2, GameConfig.PANEL_HEIGHT - 40);
+    }
+
+    public GameState getCurrentGameState() {
+        return gameState;
     }
 
     @Override
     public void mousePressed(MouseEvent e) {
-        if (gameState == GameState.WhiteTurn || gameState == GameState.BlackTurn) {
-            Position gridPosition = gameGrid.convertMouseToGridPosition(new Position(e.getX(), e.getY()));
+        Position gridPosition = gameGrid.convertMouseToGridPosition(new Position(e.getX(), e.getY()));
 
-            if (gridPosition != null) {
-                playTurn(gridPosition);
-            }
+        if (gridPosition != null) {
+            playTurn(gridPosition);
         }
     }
 
@@ -139,5 +122,9 @@ public class GameWindow extends JPanel implements MouseListener {
 
     @Override
     public void mouseExited(MouseEvent e) {
+    }
+
+    public enum GameState {
+        WhiteTurn, BlackTurn, Draw, WhiteWins, BlackWins
     }
 }

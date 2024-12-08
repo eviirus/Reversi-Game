@@ -8,7 +8,6 @@ public class Position {
     public static final Position UP_LEFT = new Position(-1, -1);
     public static final Position UP_RIGHT = new Position(1, -1);
 
-
     public int x;
     public int y;
 
